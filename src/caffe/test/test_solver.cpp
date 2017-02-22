@@ -7,7 +7,6 @@
 
 #include "caffe/common.hpp"
 #include "caffe/proto/caffe.pb.h"
-#include "caffe/sgd_solvers.hpp"
 #include "caffe/solver.hpp"
 
 #include "caffe/test/test_caffe_main.hpp"
@@ -19,6 +18,7 @@ namespace caffe {
 template <typename TypeParam>
 class SolverTest : public MultiDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
+  typedef typename TypeParam::Mtype Mtype;
 
  protected:
   virtual void InitSolverFromProtoString(const string& proto) {
@@ -35,10 +35,10 @@ class SolverTest : public MultiDeviceTest<TypeParam> {
       default:
         LOG(FATAL) << "Unknown Caffe mode: " << Caffe::mode();
     }
-    solver_.reset(new SGDSolver<Dtype>(param));
+    solver_.reset(new SGDSolver<Dtype,Mtype>(param));
   }
 
-  shared_ptr<Solver<Dtype> > solver_;
+  shared_ptr<Solver<Dtype,Mtype> > solver_;
 };
 
 TYPED_TEST_CASE(SolverTest, TestDtypesAndDevices);

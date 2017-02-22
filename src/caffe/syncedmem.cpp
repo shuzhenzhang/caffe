@@ -1,5 +1,8 @@
+#include <cstring>
+
 #include "caffe/common.hpp"
 #include "caffe/syncedmem.hpp"
+#include "caffe/util/gpu_memory.hpp"
 #include "caffe/util/math_functions.hpp"
 
 namespace caffe {
@@ -16,7 +19,7 @@ SyncedMemory::~SyncedMemory() {
     if (gpu_device_ != -1) {
       CUDA_CHECK(cudaSetDevice(gpu_device_));
     }
-    CUDA_CHECK(cudaFree(gpu_ptr_));
+    gpu_memory::deallocate(gpu_ptr_);
     cudaSetDevice(initial_device);
   }
 #endif  // CPU_ONLY
@@ -53,7 +56,7 @@ inline void SyncedMemory::to_gpu() {
   switch (head_) {
   case UNINITIALIZED:
     CUDA_CHECK(cudaGetDevice(&gpu_device_));
-    CUDA_CHECK(cudaMalloc(&gpu_ptr_, size_));
+    gpu_memory::allocate(&gpu_ptr_, size_);
     caffe_gpu_memset(size_, 0, gpu_ptr_);
     head_ = HEAD_AT_GPU;
     own_gpu_data_ = true;
@@ -61,7 +64,7 @@ inline void SyncedMemory::to_gpu() {
   case HEAD_AT_CPU:
     if (gpu_ptr_ == NULL) {
       CUDA_CHECK(cudaGetDevice(&gpu_device_));
-      CUDA_CHECK(cudaMalloc(&gpu_ptr_, size_));
+      gpu_memory::allocate(&gpu_ptr_, size_);
       own_gpu_data_ = true;
     }
     caffe_gpu_memcpy(size_, cpu_ptr_, gpu_ptr_);
@@ -97,7 +100,6 @@ const void* SyncedMemory::gpu_data() {
   return (const void*)gpu_ptr_;
 #else
   NO_GPU;
-  return NULL;
 #endif
 }
 
@@ -110,7 +112,7 @@ void SyncedMemory::set_gpu_data(void* data) {
     if (gpu_device_ != -1) {
       CUDA_CHECK(cudaSetDevice(gpu_device_));
     }
-    CUDA_CHECK(cudaFree(gpu_ptr_));
+    gpu_memory::deallocate(gpu_ptr_);
     cudaSetDevice(initial_device);
   }
   gpu_ptr_ = data;
@@ -134,7 +136,6 @@ void* SyncedMemory::mutable_gpu_data() {
   return gpu_ptr_;
 #else
   NO_GPU;
-  return NULL;
 #endif
 }
 
@@ -143,7 +144,7 @@ void SyncedMemory::async_gpu_push(const cudaStream_t& stream) {
   CHECK(head_ == HEAD_AT_CPU);
   if (gpu_ptr_ == NULL) {
     CUDA_CHECK(cudaGetDevice(&gpu_device_));
-    CUDA_CHECK(cudaMalloc(&gpu_ptr_, size_));
+    gpu_memory::allocate(&gpu_ptr_, size_);
     own_gpu_data_ = true;
   }
   const cudaMemcpyKind put = cudaMemcpyHostToDevice;

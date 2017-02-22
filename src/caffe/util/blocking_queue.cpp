@@ -1,8 +1,8 @@
 #include <boost/thread.hpp>
 #include <string>
 
+#include "caffe/data_layers.hpp"
 #include "caffe/data_reader.hpp"
-#include "caffe/layers/base_data_layer.hpp"
 #include "caffe/parallel.hpp"
 #include "caffe/util/blocking_queue.hpp"
 
@@ -86,14 +86,19 @@ size_t BlockingQueue<T>::size() const {
   return queue_.size();
 }
 
-template class BlockingQueue<Batch<float>*>;
-template class BlockingQueue<Batch<double>*>;
+template class BlockingQueue<Batch<float,float>*>;
+template class BlockingQueue<Batch<double,double>*>;
+#ifndef CPU_ONLY
+template class BlockingQueue<Batch<float16,float>*>;
+template class BlockingQueue<Batch<float16,float16>*>;
+#endif
 template class BlockingQueue<Datum*>;
-template class BlockingQueue<AnnotatedDatum*>;
-template class BlockingQueue<shared_ptr<DataReader<Datum>::QueuePair> >;
-template class BlockingQueue<
-  shared_ptr<DataReader<AnnotatedDatum>::QueuePair> >;
-template class BlockingQueue<P2PSync<float>*>;
-template class BlockingQueue<P2PSync<double>*>;
+template class BlockingQueue<shared_ptr<DataReader::QueuePair> >;
+template class BlockingQueue<P2PSync<float,float>*>;
+template class BlockingQueue<P2PSync<double,double>*>;
+#ifndef CPU_ONLY
+template class BlockingQueue<P2PSync<float16,float>*>;
+template class BlockingQueue<P2PSync<float16,float16>*>;
+#endif
 
 }  // namespace caffe

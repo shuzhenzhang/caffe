@@ -1,14 +1,13 @@
 #include <vector>
 
-#include "caffe/layers/reshape_layer.hpp"
+#include "caffe/common_layers.hpp"
+#include "caffe/layer.hpp"
 
 namespace caffe {
 
-template <typename Dtype>
-void ReshapeLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
-  CHECK_NE(top[0], bottom[0]) << this->type() << " Layer does not "
-      "allow in-place computation.";
+template <typename Dtype, typename Mtype>
+void ReshapeLayer<Dtype,Mtype>::LayerSetUp(const vector<Blob<Dtype,Mtype>*>& bottom,
+    const vector<Blob<Dtype,Mtype>*>& top) {
   inferred_axis_ = -1;
   copy_axes_.clear();
   const BlobShape& top_blob_shape = this->layer_param_.reshape_param().shape();
@@ -28,9 +27,9 @@ void ReshapeLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   }
 }
 
-template <typename Dtype>
-void ReshapeLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
+template <typename Dtype, typename Mtype>
+void ReshapeLayer<Dtype,Mtype>::Reshape(const vector<Blob<Dtype,Mtype>*>& bottom,
+    const vector<Blob<Dtype,Mtype>*>& top) {
   const int input_start_axis = this->layer_param_.reshape_param().axis();
   const int start_axis = (input_start_axis >= 0) ? input_start_axis :
       bottom[0]->num_axes() + input_start_axis + 1;

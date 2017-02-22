@@ -188,10 +188,7 @@ static void get_solver(MEX_ARGS) {
       "Usage: caffe_('get_solver', solver_file)");
   char* solver_file = mxArrayToString(prhs[0]);
   mxCHECK_FILE_EXIST(solver_file);
-  SolverParameter solver_param;
-  ReadSolverParamsFromTextFileOrDie(solver_file, &solver_param);
-  shared_ptr<Solver<float> > solver(
-      SolverRegistry<float>::CreateSolver(solver_param));
+  shared_ptr<Solver<float> > solver(new caffe::SGDSolver<float>(solver_file));
   solvers_.push_back(solver);
   plhs[0] = ptr_to_handle<Solver<float> >(solver.get());
   mxFree(solver_file);
@@ -504,13 +501,6 @@ static void write_mean(MEX_ARGS) {
   mxFree(mean_proto_file);
 }
 
-// Usage: caffe_('version')
-static void version(MEX_ARGS) {
-  mxCHECK(nrhs == 0, "Usage: caffe_('version')");
-  // Return version string
-  plhs[0] = mxCreateString(AS_STRING(CAFFE_VERSION));
-}
-
 /** -----------------------------------------------------------------
  ** Available commands.
  **/
@@ -549,7 +539,6 @@ static handler_registry handlers[] = {
   { "reset",              reset           },
   { "read_mean",          read_mean       },
   { "write_mean",         write_mean      },
-  { "version",            version         },
   // The end.
   { "END",                NULL            },
 };

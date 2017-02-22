@@ -10,24 +10,24 @@
 #define NO_GPU LOG(FATAL) << "Cannot use GPU in CPU-only Caffe: check mode."
 
 #define STUB_GPU(classname) \
-template <typename Dtype> \
-void classname<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom, \
-    const vector<Blob<Dtype>*>& top) { NO_GPU; } \
-template <typename Dtype> \
-void classname<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top, \
+template <typename Dtype, typename Mtype> \
+void classname<Dtype,Mtype>::Forward_gpu(const vector<Blob<Dtype,Mtype>*>& bottom, \
+    const vector<Blob<Dtype,Mtype>*>& top) { NO_GPU; } \
+template <typename Dtype, typename Mtype> \
+void classname<Dtype,Mtype>::Backward_gpu(const vector<Blob<Dtype,Mtype>*>& top, \
     const vector<bool>& propagate_down, \
-    const vector<Blob<Dtype>*>& bottom) { NO_GPU; } \
+    const vector<Blob<Dtype,Mtype>*>& bottom) { NO_GPU; } \
 
 #define STUB_GPU_FORWARD(classname, funcname) \
-template <typename Dtype> \
-void classname<Dtype>::funcname##_##gpu(const vector<Blob<Dtype>*>& bottom, \
-    const vector<Blob<Dtype>*>& top) { NO_GPU; } \
+template <typename Dtype, typename Mtype> \
+void classname<Dtype,Mtype>::funcname##_##gpu(const vector<Blob<Dtype,Mtype>*>& bottom, \
+    const vector<Blob<Dtype,Mtype>*>& top) { NO_GPU; } \
 
 #define STUB_GPU_BACKWARD(classname, funcname) \
-template <typename Dtype> \
-void classname<Dtype>::funcname##_##gpu(const vector<Blob<Dtype>*>& top, \
+template <typename Dtype, typename Mtype> \
+void classname<Dtype,Mtype>::funcname##_##gpu(const vector<Blob<Dtype,Mtype>*>& top, \
     const vector<bool>& propagate_down, \
-    const vector<Blob<Dtype>*>& bottom) { NO_GPU; } \
+    const vector<Blob<Dtype,Mtype>*>& bottom) { NO_GPU; } \
 
 #else  // Normal GPU + CPU Caffe.
 
@@ -66,6 +66,18 @@ void classname<Dtype>::funcname##_##gpu(const vector<Blob<Dtype>*>& top, \
       << caffe::curandGetErrorString(status); \
   } while (0)
 
+#ifdef USE_CNMEM
+
+#define CNMEM_CHECK(condition) \
+  do { \
+    cnmemStatus_t status = condition; \
+    CHECK_EQ(status, CNMEM_STATUS_SUCCESS) << " " \
+      << cnmemGetErrorString(status); \
+  } while (0)
+#else
+#define CNMEM_CHECK(condition)
+#endif
+
 // CUDA: grid stride looping
 #define CUDA_KERNEL_LOOP(i, n) \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; \
@@ -81,8 +93,14 @@ namespace caffe {
 const char* cublasGetErrorString(cublasStatus_t error);
 const char* curandGetErrorString(curandStatus_t error);
 
-// CUDA: use 512 threads per block
-const int CAFFE_CUDA_NUM_THREADS = 512;
+// CUDA: thread number configuration.
+// Use 1024 threads per block, which requires cuda sm_2x or above,
+// or fall back to attempt compatibility (best of luck to you).
+#if __CUDA_ARCH__ >= 200
+    const int CAFFE_CUDA_NUM_THREADS = 1024;
+#else
+    const int CAFFE_CUDA_NUM_THREADS = 512;
+#endif
 
 // CUDA: number of blocks for threads.
 inline int CAFFE_GET_BLOCKS(const int N) {

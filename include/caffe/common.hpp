@@ -17,10 +17,31 @@
 #include <vector>
 
 #include "caffe/util/device_alternate.hpp"
+#include "caffe/util/float16.hpp"
 
-// Convert macro to string
-#define STRINGIFY(m) #m
-#define AS_STRING(m) STRINGIFY(m)
+#ifndef CPU_ONLY
+#  include "caffe/util/float16.hpp"
+#  include "cuda_fp16.h"
+#  if CUDA_VERSION >= 8000
+#    define CAFFE_DATA_HALF CUDA_R_16F
+#  else
+#    define CAFFE_DATA_HALF CUBLAS_DATA_HALF
+#  endif
+#endif
+
+
+// We only build 1 flavor per host architecture:
+// <float16,float> for Intel
+// <float16,float16> for ARM
+
+// --> Makefile.config
+//#define NATIVE_FP16 1
+
+#if NATIVE_FP16
+# define CAFFE_FP16_MTYPE float16
+#else
+# define CAFFE_FP16_MTYPE float
+#endif
 
 // gflags 2.1 issue: namespace google was changed to gflags without warning.
 // Luckily we will be able to use GFLAGS_GFLAGS_H_ to detect if it is version
@@ -37,33 +58,59 @@ private:\
   classname(const classname&);\
   classname& operator=(const classname&)
 
-// Instantiate a class with float and double specifications.
-#define INSTANTIATE_CLASS(classname) \
+#define INSTANTIATE_CLASS_CPU(classname) \
   char gInstantiationGuard##classname; \
-  template class classname<float>; \
-  template class classname<double>
+  template class classname<float, float>; \
+  template class classname<double, double>
 
-#define INSTANTIATE_LAYER_GPU_FORWARD(classname) \
-  template void classname<float>::Forward_gpu( \
-      const std::vector<Blob<float>*>& bottom, \
-      const std::vector<Blob<float>*>& top); \
-  template void classname<double>::Forward_gpu( \
-      const std::vector<Blob<double>*>& bottom, \
-      const std::vector<Blob<double>*>& top);
+// Instantiate a class with float and double specifications.
+#ifdef CPU_ONLY
 
-#define INSTANTIATE_LAYER_GPU_BACKWARD(classname) \
-  template void classname<float>::Backward_gpu( \
-      const std::vector<Blob<float>*>& top, \
+# define INSTANTIATE_CLASS(classname) INSTANTIATE_CLASS_CPU(classname)
+
+#else
+
+# define INSTANTIATE_LAYER_GPU_FORWARD_FF(classname) \
+  template void classname<float16,CAFFE_FP16_MTYPE>::Forward_gpu( \
+      const std::vector<Blob<float16,CAFFE_FP16_MTYPE>*>& bottom, \
+      const std::vector<Blob<float16,CAFFE_FP16_MTYPE>*>& top) 
+
+# define INSTANTIATE_LAYER_GPU_BACKWARD_FF(classname) \
+  template void classname<float16,CAFFE_FP16_MTYPE>::Backward_gpu( \
+      const std::vector<Blob<float16,CAFFE_FP16_MTYPE>*>& top, \
       const std::vector<bool>& propagate_down, \
-      const std::vector<Blob<float>*>& bottom); \
-  template void classname<double>::Backward_gpu( \
-      const std::vector<Blob<double>*>& top, \
-      const std::vector<bool>& propagate_down, \
-      const std::vector<Blob<double>*>& bottom)
+      const std::vector<Blob<float16,CAFFE_FP16_MTYPE>*>& bottom)
 
-#define INSTANTIATE_LAYER_GPU_FUNCS(classname) \
-  INSTANTIATE_LAYER_GPU_FORWARD(classname); \
-  INSTANTIATE_LAYER_GPU_BACKWARD(classname)
+# define INSTANTIATE_LAYER_GPU_FORWARD(classname) \
+  template void classname<float, float>::Forward_gpu( \
+      const std::vector<Blob<float, float>*>& bottom, \
+      const std::vector<Blob<float, float>*>& top); \
+  template void classname<double, double>::Forward_gpu( \
+      const std::vector<Blob<double, double>*>& bottom, \
+      const std::vector<Blob<double, double>*>& top); 
+
+# define INSTANTIATE_LAYER_GPU_BACKWARD(classname) \
+  template void classname<float, float>::Backward_gpu( \
+      const std::vector<Blob<float, float>*>& top, \
+      const std::vector<bool>& propagate_down, \
+      const std::vector<Blob<float, float>*>& bottom); \
+  template void classname<double, double>::Backward_gpu( \
+      const std::vector<Blob<double, double>*>& top, \
+      const std::vector<bool>& propagate_down, \
+      const std::vector<Blob<double, double>*>& bottom)
+
+
+#  define INSTANTIATE_CLASS(classname) \
+  INSTANTIATE_CLASS_CPU(classname); \
+   template class classname<float16,CAFFE_FP16_MTYPE>
+
+#  define INSTANTIATE_LAYER_GPU_FUNCS(classname) \
+   INSTANTIATE_LAYER_GPU_FORWARD(classname); \
+   INSTANTIATE_LAYER_GPU_FORWARD_FF(classname); \
+   INSTANTIATE_LAYER_GPU_BACKWARD(classname); \
+   INSTANTIATE_LAYER_GPU_BACKWARD_FF(classname);
+
+#endif
 
 // A simple macro to mark codes that are not implemented, so that when the code
 // is executed we will see a fatal log.
@@ -136,6 +183,9 @@ class Caffe {
   inline static curandGenerator_t curand_generator() {
     return Get().curand_generator_;
   }
+#ifdef USE_CUDNN
+  inline static cudnnHandle_t cudnn_handle() { return Get().cudnn_handle_; }
+#endif
 #endif
 
   // Returns the mode: running on CPU or GPU.
@@ -153,11 +203,6 @@ class Caffe {
   static void SetDevice(const int device_id);
   // Prints the current GPU status.
   static void DeviceQuery();
-  // Check if specified device is available
-  static bool CheckDevice(const int device_id);
-  // Search from start_id to the highest possible device ordinal,
-  // return the ordinal of the first available device.
-  static int FindDevice(const int start_id = 0);
   // Parallel training info
   inline static int solver_count() { return Get().solver_count_; }
   inline static void set_solver_count(int val) { Get().solver_count_ = val; }
@@ -168,6 +213,9 @@ class Caffe {
 #ifndef CPU_ONLY
   cublasHandle_t cublas_handle_;
   curandGenerator_t curand_generator_;
+#ifdef USE_CUDNN
+  cudnnHandle_t cudnn_handle_;
+#endif
 #endif
   shared_ptr<RNG> random_generator_;
 
@@ -185,3 +233,4 @@ class Caffe {
 }  // namespace caffe
 
 #endif  // CAFFE_COMMON_HPP_
+

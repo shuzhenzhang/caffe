@@ -38,7 +38,7 @@ class Classifier {
                   std::vector<cv::Mat>* input_channels);
 
  private:
-  shared_ptr<Net<float> > net_;
+  shared_ptr<Net<float,float> > net_;
   cv::Size input_geometry_;
   int num_channels_;
   cv::Mat mean_;
@@ -56,13 +56,13 @@ Classifier::Classifier(const string& model_file,
 #endif
 
   /* Load the network. */
-  net_.reset(new Net<float>(model_file, TEST));
+  net_.reset(new Net<float,float>(model_file, TEST));
   net_->CopyTrainedLayersFrom(trained_file);
 
   CHECK_EQ(net_->num_inputs(), 1) << "Network should have exactly one input.";
   CHECK_EQ(net_->num_outputs(), 1) << "Network should have exactly one output.";
 
-  Blob<float>* input_layer = net_->input_blobs()[0];
+  Blob<float,float>* input_layer = net_->input_blobs()[0];
   num_channels_ = input_layer->channels();
   CHECK(num_channels_ == 3 || num_channels_ == 1)
     << "Input layer should have 1 or 3 channels.";
@@ -78,7 +78,7 @@ Classifier::Classifier(const string& model_file,
   while (std::getline(labels, line))
     labels_.push_back(string(line));
 
-  Blob<float>* output_layer = net_->output_blobs()[0];
+  Blob<float,float>* output_layer = net_->output_blobs()[0];
   CHECK_EQ(labels_.size(), output_layer->channels())
     << "Number of labels is different from the output layer dimension.";
 }
@@ -122,7 +122,7 @@ void Classifier::SetMean(const string& mean_file) {
   ReadProtoFromBinaryFileOrDie(mean_file.c_str(), &blob_proto);
 
   /* Convert from BlobProto to Blob<float> */
-  Blob<float> mean_blob;
+  Blob<float,float> mean_blob;
   mean_blob.FromProto(blob_proto);
   CHECK_EQ(mean_blob.channels(), num_channels_)
     << "Number of channels of mean file doesn't match input layer.";
@@ -148,7 +148,7 @@ void Classifier::SetMean(const string& mean_file) {
 }
 
 std::vector<float> Classifier::Predict(const cv::Mat& img) {
-  Blob<float>* input_layer = net_->input_blobs()[0];
+  Blob<float,float>* input_layer = net_->input_blobs()[0];
   input_layer->Reshape(1, num_channels_,
                        input_geometry_.height, input_geometry_.width);
   /* Forward dimension change to all layers. */
@@ -159,10 +159,10 @@ std::vector<float> Classifier::Predict(const cv::Mat& img) {
 
   Preprocess(img, &input_channels);
 
-  net_->Forward();
+  net_->ForwardPrefilled();
 
   /* Copy the output layer to a std::vector */
-  Blob<float>* output_layer = net_->output_blobs()[0];
+  Blob<float,float>* output_layer = net_->output_blobs()[0];
   const float* begin = output_layer->cpu_data();
   const float* end = begin + output_layer->channels();
   return std::vector<float>(begin, end);
@@ -174,7 +174,7 @@ std::vector<float> Classifier::Predict(const cv::Mat& img) {
  * operation will write the separate channels directly to the input
  * layer. */
 void Classifier::WrapInputLayer(std::vector<cv::Mat>* input_channels) {
-  Blob<float>* input_layer = net_->input_blobs()[0];
+  Blob<float,float>* input_layer = net_->input_blobs()[0];
 
   int width = input_layer->width();
   int height = input_layer->height();
@@ -191,13 +191,13 @@ void Classifier::Preprocess(const cv::Mat& img,
   /* Convert the input image to the input image format of the network. */
   cv::Mat sample;
   if (img.channels() == 3 && num_channels_ == 1)
-    cv::cvtColor(img, sample, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(img, sample, CV_BGR2GRAY);
   else if (img.channels() == 4 && num_channels_ == 1)
-    cv::cvtColor(img, sample, cv::COLOR_BGRA2GRAY);
+    cv::cvtColor(img, sample, CV_BGRA2GRAY);
   else if (img.channels() == 4 && num_channels_ == 3)
-    cv::cvtColor(img, sample, cv::COLOR_BGRA2BGR);
+    cv::cvtColor(img, sample, CV_BGRA2BGR);
   else if (img.channels() == 1 && num_channels_ == 3)
-    cv::cvtColor(img, sample, cv::COLOR_GRAY2BGR);
+    cv::cvtColor(img, sample, CV_GRAY2BGR);
   else
     sample = img;
 

@@ -2,14 +2,24 @@
 #ifndef CAFFE_UTIL_DB_LMDB_HPP
 #define CAFFE_UTIL_DB_LMDB_HPP
 
+#include <stdint.h>
 #include <string>
-#include <vector>
 
 #include "lmdb.h"
 
 #include "caffe/util/db.hpp"
 
 namespace caffe { namespace db {
+
+#if UINTPTR_MAX == 0xffffffff
+/* 32-bit */
+const size_t LMDB_MAP_SIZE = 1073741824;  // 1 GB
+#elif UINTPTR_MAX == 0xffffffffffffffff
+/* 64-bit */
+const size_t LMDB_MAP_SIZE = 1099511627776;  // 1 TB
+#else
+#  error "Bad stdint.h!"
+#endif
 
 inline void MDB_CHECK(int mdb_status) {
   CHECK_EQ(mdb_status, MDB_SUCCESS) << mdb_strerror(mdb_status);
@@ -55,16 +65,14 @@ class LMDBCursor : public Cursor {
 
 class LMDBTransaction : public Transaction {
  public:
-  explicit LMDBTransaction(MDB_env* mdb_env)
-    : mdb_env_(mdb_env) { }
+  explicit LMDBTransaction(MDB_dbi* mdb_dbi, MDB_txn* mdb_txn)
+    : mdb_dbi_(mdb_dbi), mdb_txn_(mdb_txn) { }
   virtual void Put(const string& key, const string& value);
-  virtual void Commit();
+  virtual void Commit() { MDB_CHECK(mdb_txn_commit(mdb_txn_)); }
 
  private:
-  MDB_env* mdb_env_;
-  vector<string> keys, values;
-
-  void DoubleMapSize();
+  MDB_dbi* mdb_dbi_;
+  MDB_txn* mdb_txn_;
 
   DISABLE_COPY_AND_ASSIGN(LMDBTransaction);
 };

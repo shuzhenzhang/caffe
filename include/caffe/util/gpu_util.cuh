@@ -1,6 +1,8 @@
 #ifndef CAFFE_UTIL_GPU_UTIL_H_
 #define CAFFE_UTIL_GPU_UTIL_H_
 
+#include <cuda_fp16.h>
+
 namespace caffe {
 
 template <typename Dtype>
@@ -28,6 +30,38 @@ double caffe_gpu_atomic_add(const double val, double* address) {
         __double_as_longlong(val + __longlong_as_double(assumed)));
   } while (assumed != old);
   return __longlong_as_double(old);
+}
+
+template <>
+inline __device__
+float16 caffe_gpu_atomic_add(const float16 val, float16* address) {
+// TODO check for FP16 implementation in future CUDA releases
+   return float16(0);
+#if 0
+   union U {
+      unsigned int i;
+      __half2 h;
+   };
+   union Up {
+      unsigned int * i;
+      __half2 * h;
+   };
+
+   Up up;
+   up.h = address;
+
+   U old;
+   old.h = *address;
+   U assumed;
+
+   do {
+      assumed.i = old.i;
+      U temp;
+      temp.h = __hadd2(val, assumed.h);
+      old.i = atomicCAS( up.i, assumed.i, temp.i);
+   } while (assumed.i != old.i );
+   return old.h;
+# endif
 }
 
 }  // namespace caffe

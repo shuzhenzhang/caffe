@@ -3,13 +3,14 @@
 #include <utility>
 #include <vector>
 
-#include "caffe/layers/argmax_layer.hpp"
+#include "caffe/layer.hpp"
+#include "caffe/vision_layers.hpp"
 
 namespace caffe {
 
-template <typename Dtype>
-void ArgMaxLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top) {
+template <typename Dtype, typename Mtype>
+void ArgMaxLayer<Dtype,Mtype>::LayerSetUp(const vector<Blob<Dtype,Mtype>*>& bottom,
+      const vector<Blob<Dtype,Mtype>*>& top) {
   const ArgMaxParameter& argmax_param = this->layer_param_.argmax_param();
   out_max_val_ = argmax_param.out_max_val();
   top_k_ = argmax_param.top_k();
@@ -29,12 +30,10 @@ void ArgMaxLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   }
 }
 
-template <typename Dtype>
-void ArgMaxLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top) {
-  int num_top_axes = bottom[0]->num_axes();
-  if ( num_top_axes < 3 ) num_top_axes = 3;
-  std::vector<int> shape(num_top_axes, 1);
+template <typename Dtype, typename Mtype>
+void ArgMaxLayer<Dtype,Mtype>::Reshape(const vector<Blob<Dtype,Mtype>*>& bottom,
+      const vector<Blob<Dtype,Mtype>*>& top) {
+  std::vector<int> shape(bottom[0]->num_axes(), 1);
   if (has_axis_) {
     // Produces max_ind or max_val per axis
     shape = bottom[0]->shape();
@@ -51,9 +50,9 @@ void ArgMaxLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   top[0]->Reshape(shape);
 }
 
-template <typename Dtype>
-void ArgMaxLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
-    const vector<Blob<Dtype>*>& top) {
+template <typename Dtype, typename Mtype>
+void ArgMaxLayer<Dtype,Mtype>::Forward_cpu(const vector<Blob<Dtype,Mtype>*>& bottom,
+    const vector<Blob<Dtype,Mtype>*>& top) {
   const Dtype* bottom_data = bottom[0]->cpu_data();
   Dtype* top_data = top[0]->mutable_cpu_data();
   int dim, axis_dist;
@@ -83,13 +82,13 @@ void ArgMaxLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
             = bottom_data_vector[j].first;
         } else {
           // Produces max_ind and max_val
-          top_data[2 * i * top_k_ + j] = bottom_data_vector[j].second;
-          top_data[2 * i * top_k_ + top_k_ + j] = bottom_data_vector[j].first;
+          top_data[2 * i * top_k_ + j] = Get<Dtype>(bottom_data_vector[j].second);
+          top_data[2 * i * top_k_ + top_k_ + j] = Get<Dtype>(bottom_data_vector[j].first);
         }
       } else {
         // Produces max_ind per axis
         top_data[(i / axis_dist * top_k_ + j) * axis_dist + i % axis_dist]
-          = bottom_data_vector[j].second;
+          = Get<Dtype>(bottom_data_vector[j].second);
       }
     }
   }
